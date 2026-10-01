@@ -7,6 +7,7 @@ import time
 from typing import Optional, List
 from agent_zed.core.engine import MoAEngine
 from agent_zed.core.jobs import JobStatus, JobPriority
+from agent_zed.core.reasoning import ReasoningEngine
 from agent_zed.agents.definitions import get_13_agent_personas
 
 try:
@@ -26,6 +27,7 @@ class ZedCLI:
 
     def __init__(self):
         self.engine = MoAEngine()
+        self.reasoning = ReasoningEngine()
         self.personas = get_13_agent_personas()
         self.console = Console() if RICH_AVAILABLE else None
 
@@ -89,18 +91,17 @@ class ZedCLI:
             self.console.print(
                 Panel(
                     "[bold yellow]CEO (Lead):[/bold yellow] Welcome! I'm the CEO of Agent-Zed. "
-                    "I lead our 13-agent workforce to solve complex coding tasks, manage jobs, and assist you.\n\n"
+                    "I lead our 13-agent workforce. Talk to me naturally or ask any coding task!\n\n"
                     "Commands:\n"
                     "  [bold cyan]/jobs[/bold cyan]     - View live workforce jobs dashboard\n"
                     "  [bold cyan]/agents[/bold cyan]   - View 13 agent corporate hierarchy & status\n"
-                    "  [bold cyan]/solve <problem>[/bold cyan] - Dispatch job to MoA workforce to solve a problem\n"
                     "  [bold cyan]/quit[/bold cyan]     - Exit zed-cli",
                     title="[bold green]Interactive CEO Session[/bold green]",
                     border_style="green"
                 )
             )
         else:
-            print("\nCEO (Lead): Welcome! Type /jobs, /agents, /solve <problem>, or /quit.")
+            print("\nCEO (Lead): Welcome! Talk to me or type /jobs, /agents, or /quit.")
 
         while True:
             try:
@@ -126,17 +127,18 @@ class ZedCLI:
                 elif user_input.lower() == "/agents":
                     self.display_agents_hierarchy()
 
-                elif user_input.startswith("/solve ") or user_input.startswith("solve "):
-                    problem = user_input.split(" ", 1)[1]
-                    await self.run_solve_task(problem)
-
                 else:
-                    # Regular CEO chat answer
-                    ceo_reply = self.generate_ceo_reply(user_input)
-                    if RICH_AVAILABLE:
-                        self.console.print(f"[bold yellow]CEO (Lead):[/bold yellow] {ceo_reply}")
+                    # Process via reasoning engine
+                    reply_or_task, is_coding_task = self.reasoning.process_input(user_input)
+                    if is_coding_task:
+                        if user_input.startswith("/solve "):
+                            user_input = user_input[7:]
+                        await self.run_solve_task(user_input)
                     else:
-                        print(f"CEO (Lead): {ceo_reply}")
+                        if RICH_AVAILABLE:
+                            self.console.print(f"[bold yellow]CEO (Lead):[/bold yellow] {reply_or_task}")
+                        else:
+                            print(f"CEO (Lead): {reply_or_task}")
 
             except (KeyboardInterrupt, EOFError):
                 print("\nExiting Agent-Zed CLI.")
@@ -159,25 +161,12 @@ class ZedCLI:
             for key, agent in self.personas.items():
                 print(f"- {agent.name} ({agent.title}) [{agent.role_type}]: {agent.personality}")
 
-    def generate_ceo_reply(self, message: str) -> str:
-        """CEO conversational response."""
-        msg_lower = message.lower()
-        if "hello" in msg_lower or "hi" in msg_lower:
-            return "Greetings! I'm here managing our 13-agent MoA engineering team. What coding challenge shall we tackle today?"
-        elif "status" in msg_lower or "work" in msg_lower:
-            active_jobs = len(self.engine.job_manager.list_jobs(JobStatus.RUNNING))
-            return f"Currently we have {active_jobs} active background job(s). The team is operating efficiently under low-RAM budget!"
-        elif "who are you" in msg_lower or "help" in msg_lower:
-            return "I am the CEO of Agent-Zed! I direct our team of 13 specialist agents (Debugger, Logic Specialist, Code Architect, Researcher, etc.) to build and verify code."
-        else:
-            return f"Understood. I will coordinate our team regarding '{message}'. You can use '/solve {message}' to create a dedicated workforce job!"
-
     async def run_solve_task(self, problem: str):
         """Execute MoA coding task with live thinking visualization."""
         if RICH_AVAILABLE:
-            self.console.print(f"\n[bold green]CEO (Lead):[/bold green] Creating background job and delegating problem: [cyan]'{problem}'[/cyan]")
+            self.console.print(f"\n[bold green]CEO (Lead):[/bold green] Creating background job and delegating problem to MoA workforce: [cyan]'{problem}'[/cyan]")
         else:
-            print(f"\nCEO (Lead): Delegating problem: '{problem}'")
+            print(f"\nCEO (Lead): Delegating problem to MoA workforce: '{problem}'")
 
         async def status_cb(agent_name: str, status_msg: str):
             if RICH_AVAILABLE:
