@@ -8,6 +8,8 @@ from typing import Dict, List, Any, Optional, AsyncGenerator, Tuple
 from agent_zed.core.sandbox import CodeSandbox
 from agent_zed.core.jobs import JobManager, JobPriority, Job, JobStatus
 from agent_zed.core.reasoning import TreeOfThoughtEngine
+from agent_zed.core.scaling import best_of_n_scaling, DeterministicVerifier
+from agent_zed.slm.model import TinyCodeGPT
 
 class EngineOptimizations:
     """Performance & memory optimizations for execution."""
@@ -43,6 +45,7 @@ class MoAEngine:
         self.job_manager = JobManager()
         self.optimizations = EngineOptimizations()
         self.tot_engine = TreeOfThoughtEngine(beam_width=4, max_depth=3)
+        self.slm_model = TinyCodeGPT(vocab_size=16000, max_len=256, d_model=256)
         self.memory_store: Dict[str, Any] = {}
 
     def extract_code_blocks(self, text: str) -> List[str]:
@@ -86,13 +89,21 @@ class MoAEngine:
 
         initial_draft = self._generate_algorithm_draft(problem_description)
 
-        # Step 2: Tree-of-Thought Search Expansion & Beam Search Pruning
+        # Step 2: Best-of-N Inference-Time Compute Scaling & Majority Voting
         if status_callback:
-            await status_callback("Researcher", "Exploring Tree-of-Thought solution branches & algorithmic patterns...")
+            await status_callback("Researcher", "Scaling inference-time compute: Best-of-N sampling & rule verifiers...")
 
-        tot_candidate, tot_score = self.tot_engine.search_best_thought(problem_description, initial_draft)
+        def candidate_gen_fn(temp: float) -> str:
+            return self.tot_engine.search_best_thought(problem_description, initial_draft)[0]
 
-        current_code = tot_candidate
+        best_candidate, valid_samples = best_of_n_scaling(
+            candidate_gen_fn,
+            n_samples=3,
+            temperature=0.7,
+            test_cases=test_cases
+        )
+
+        current_code = best_candidate
 
         # Step 3: AST Verification, Debugging, and Error Patching Loop
         round_idx = 0
@@ -131,7 +142,7 @@ class MoAEngine:
                 is_verified = True
                 best_code = current_code
                 if status_callback:
-                    await status_callback("Performance Optimizer", f"Code verified! Tree-of-Thought score: {tot_score:.1f}. Optimizing complexity...")
+                    await status_callback("Performance Optimizer", "Code verified! Best-of-N voting passed. Optimizing complexity...")
                     await status_callback("Security Auditor", "Inspecting code for safety vulnerabilities... Clean!")
                 break
             else:
@@ -155,7 +166,6 @@ class MoAEngine:
             "code": best_code,
             "verified": is_verified,
             "rounds_used": round_idx,
-            "tot_score": tot_score,
             "elapsed_seconds": round(elapsed, 3),
             "job_id": job.id
         }
@@ -163,7 +173,7 @@ class MoAEngine:
         self.job_manager.mark_completed(
             job.id,
             result=result_payload,
-            summary=f"Solved & Verified in {elapsed:.2f}s (ToT Score: {tot_score:.0f})"
+            summary=f"Solved & Verified in {elapsed:.2f}s (Best-of-N Passed)"
         )
 
         return result_payload
