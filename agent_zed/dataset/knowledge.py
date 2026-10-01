@@ -1,39 +1,43 @@
-"""Local Knowledge Base & Dataset Synthesizer for Agent-Zed Reasoning Engine."""
+"""Comprehensive Knowledge Base & Software Engineering Dataset for Agent-Zed."""
 
 INTENT_KNOWLEDGE_BASE = {
     "greetings": [
-        "Hello! I am the CEO of Agent-Zed. I lead our 13-agent MoA engineering team. How can I assist your coding journey today?",
-        "Greetings! The 13-agent workforce is ready and operating at peak efficiency under a low-memory budget. What shall we design or solve?"
+        "Greetings! I am the CEO of Agent-Zed. I direct our 13-agent MoA engineering team. How can we innovate or build today?",
+        "Hello! Our 13-agent workforce is operational with Tree-of-Thought search, AST sandboxing, and web intelligence. What coding challenge shall we solve?"
     ],
     "identity": [
-        "I am the CEO of Agent-Zed! I lead a 13-agent Mixture-of-Agents (MoA) engineering team featuring a Researcher, Debugger, Logic Specialist, Code Architect, Security Auditor, and 8 other specialized roles. We work 100% locally to solve coding problems.",
-        "Agent-Zed is an autonomous MoA framework where 13 AI persona agents collaborate, debate, run code in sandboxes, and synthesize verified solutions."
+        "I am the CEO of Agent-Zed! I lead our 13-agent Mixture-of-Agents (MoA) engineering company featuring a Researcher, Debugger, Logic Specialist, Code Architect, Security Auditor, and 8 other specialized roles. We solve complex software engineering tasks 100% locally."
     ],
     "capabilities": [
-        "Here is what our 13-agent MoA team can do:\n1. Solve complex algorithmic problems (Dynamic Programming, Graph theory, AST Parsers, Concurrency).\n2. Write, debug, and run Python, HTML, CSS, JavaScript code.\n3. Perform web research & document scraping via the Researcher agent.\n4. Sandbox execute code and automatically patch stack trace errors via Debugger & Test Engineer.\n5. Optimize O(N) complexity and memory footprint via Performance Optimizer."
+        "Agent-Zed Capabilities:\n1. Tree-of-Thought (ToT) & Beam Search algorithmic reasoning.\n2. Dynamic Programming, Graph Optimization, High-Concurrency structures, and AST Compiler evaluators.\n3. Web research & documentation scraping via Researcher agent.\n4. Sandbox AST code execution & error auto-patching via Debugger & Test Engineer.\n5. O(N) Complexity and Memory profiling via Performance Optimizer.\n6. Interactive CEO session & live workforce jobs management."
     ],
     "python": [
-        "Python is a versatile high-level language. For asynchronous I/O, `asyncio` allows non-blocking concurrency. For performance-critical loops, memory profiling or algorithm state compression (e.g. Bitmask DP) can dramatically increase speed."
+        "Python Software Engineering Principles:\n- Asynchronous I/O via `asyncio` for non-blocking network/concurrency.\n- Type hints (`typing` module) for compile-time safety and IDE introspection.\n- Abstract Syntax Tree (`ast` module) for code parsing and metaprogramming.\n- High-performance memory management using state bitmasking and memoization."
     ],
     "html_css_js": [
-        "Modern frontend design uses semantic HTML5, responsive CSS flexbox/grid layout systems, and asynchronous JavaScript (ES6+ async/await) for interactive UI rendering."
+        "Modern Full-Stack Web Development:\n- HTML5: Semantic elements (`<main>`, `<article>`, `<section>`), accessibility ARIA tags.\n- CSS3: Flexbox, CSS Grid layouts, CSS variables, keyframe animations, responsive design.\n- JavaScript (ES6+): Promises, `async/await`, Event Loop, DOM manipulation, Web Components."
+    ],
+    "architecture": [
+        "Software Architecture Patterns:\n- Clean Architecture / Microservices: Decoupled domain models, interfaces, dependency injection.\n- Mixture-of-Agents (MoA): Multi-agent consensus layers with specialized persona evaluation.\n- Tree-of-Thought Search: Exploring multiple solution branches and selecting optimal heuristic paths."
     ]
 }
 
 class KnowledgeSynthesizer:
-    """Local dataset and heuristic reasoning matcher."""
+    """Knowledge graph matcher and query analyzer."""
 
     @staticmethod
     def match_intent(text: str) -> str:
         t_lower = text.lower().strip()
         if t_lower in ["hi", "hello", "hey", "greetings", "yo"]:
             return INTENT_KNOWLEDGE_BASE["greetings"][0]
-        elif "who are you" in t_lower or "what are you" in t_lower or "what is agent-zed" in t_lower:
+        elif "who are you" in t_lower or "what are you" in t_lower or "agent-zed" in t_lower:
             return INTENT_KNOWLEDGE_BASE["identity"][0]
         elif "what can you do" in t_lower or "capabilities" in t_lower or "help" in t_lower:
             return INTENT_KNOWLEDGE_BASE["capabilities"][0]
-        elif "python" in t_lower or "async" in t_lower:
+        elif "python" in t_lower or "async" in t_lower or "ast" in t_lower:
             return INTENT_KNOWLEDGE_BASE["python"][0]
         elif "html" in t_lower or "css" in t_lower or "javascript" in t_lower or "js" in t_lower:
             return INTENT_KNOWLEDGE_BASE["html_css_js"][0]
+        elif "architecture" in t_lower or "pattern" in t_lower or "moa" in t_lower:
+            return INTENT_KNOWLEDGE_BASE["architecture"][0]
         return None

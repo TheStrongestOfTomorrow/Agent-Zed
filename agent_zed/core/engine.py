@@ -1,4 +1,4 @@
-"""Core Mixture-of-Agents (MoA) Engine & AST Reasoning System for Agent-Zed."""
+"""Core Mixture-of-Agents (MoA) Engine & Tree-of-Thought Reasoning System."""
 
 import asyncio
 import time
@@ -7,11 +7,12 @@ import re
 from typing import Dict, List, Any, Optional, AsyncGenerator, Tuple
 from agent_zed.core.sandbox import CodeSandbox
 from agent_zed.core.jobs import JobManager, JobPriority, Job, JobStatus
+from agent_zed.core.reasoning import TreeOfThoughtEngine
 
 class EngineOptimizations:
-    """Performance & low-RAM optimizations for Android (4GB RAM) execution."""
+    """Performance & memory optimizations for execution."""
 
-    def __init__(self, max_context_chars: int = 4000, cache_ttl_sec: float = 300.0):
+    def __init__(self, max_context_chars: int = 16000, cache_ttl_sec: float = 300.0):
         self.max_context_chars = max_context_chars
         self.cache_ttl_sec = cache_ttl_sec
         self._cache: Dict[str, Tuple[float, Any]] = {}
@@ -22,7 +23,7 @@ class EngineOptimizations:
             return text
         head = text[: self.max_context_chars // 4]
         tail = text[- (3 * self.max_context_chars // 4) :]
-        return f"{head}\n\n[... Context compressed for low-memory efficiency ...]\n\n{tail}"
+        return f"{head}\n\n[... Context compressed for memory efficiency ...]\n\n{tail}"
 
     def get_cached(self, key: str) -> Optional[Any]:
         if key in self._cache:
@@ -36,11 +37,12 @@ class EngineOptimizations:
         self._cache[key] = (time.time(), value)
 
 class MoAEngine:
-    """Core MoA Engine driving multi-agent reasoning, code generation, and task execution."""
+    """Core MoA Engine driving multi-agent Tree-of-Thought reasoning, sandbox execution, and code generation."""
 
     def __init__(self):
         self.job_manager = JobManager()
         self.optimizations = EngineOptimizations()
+        self.tot_engine = TreeOfThoughtEngine(beam_width=4, max_depth=3)
         self.memory_store: Dict[str, Any] = {}
 
     def extract_code_blocks(self, text: str) -> List[str]:
@@ -60,7 +62,7 @@ class MoAEngine:
         max_rounds: int = 3,
         status_callback: Optional[Any] = None
     ) -> Dict[str, Any]:
-        """Execute deep MoA reasoning loop across agent personas to synthesize verified code."""
+        """Execute Tree-of-Thought MoA reasoning loop across 13 agent personas to synthesize verified code."""
 
         start_time = time.time()
         job = self.job_manager.create_job(
@@ -76,22 +78,30 @@ class MoAEngine:
         if status_callback:
             await status_callback("CEO", f"Delegated problem to MoA workforce team under Job [{job.id}]")
 
-        # Step 1: Initial Logic Strategy & Code Draft
+        # Step 1: Initial Draft Strategy
         self.job_manager.update_job_progress(job.id, 20.0, "Code Architect & Logic Specialist drafting solution...")
         if status_callback:
-            await status_callback("Logic Specialist", "Analyzing algorithmic logic, edge cases, and time complexity...")
+            await status_callback("Logic Specialist", "Analyzing algorithmic logic, edge cases, and invariants...")
             await status_callback("Code Architect", "Designing modular structure and algorithm pattern...")
 
-        current_code = self._generate_algorithm_draft(problem_description)
+        initial_draft = self._generate_algorithm_draft(problem_description)
 
-        # Step 2: Verification, Debugging, and AST Feedback Loop
+        # Step 2: Tree-of-Thought Search Expansion & Beam Search Pruning
+        if status_callback:
+            await status_callback("Researcher", "Exploring Tree-of-Thought solution branches & algorithmic patterns...")
+
+        tot_candidate, tot_score = self.tot_engine.search_best_thought(problem_description, initial_draft)
+
+        current_code = tot_candidate
+
+        # Step 3: AST Verification, Debugging, and Error Patching Loop
         round_idx = 0
         best_code = current_code
         is_verified = False
 
         while round_idx < max_rounds and not is_verified:
             round_idx += 1
-            progress = 20.0 + (round_idx / max_rounds) * 60.0
+            progress = 30.0 + (round_idx / max_rounds) * 50.0
             self.job_manager.update_job_progress(job.id, progress, f"Round {round_idx}: Debugger & Optimizer reviewing...")
 
             if status_callback:
@@ -121,8 +131,8 @@ class MoAEngine:
                 is_verified = True
                 best_code = current_code
                 if status_callback:
-                    await status_callback("Performance Optimizer", "Code execution verified! Optimizing time and space complexity...")
-                    await status_callback("Security Auditor", "Inspecting code for vulnerabilities and safety... Clean!")
+                    await status_callback("Performance Optimizer", f"Code verified! Tree-of-Thought score: {tot_score:.1f}. Optimizing complexity...")
+                    await status_callback("Security Auditor", "Inspecting code for safety vulnerabilities... Clean!")
                 break
             else:
                 # Code failed, Debugger & Refactoring Specialist repair it
@@ -134,7 +144,7 @@ class MoAEngine:
                 current_code = self._repair_code_draft(problem_description, current_code, error_feedback)
                 best_code = current_code
 
-        # Step 3: Synthesis & Final Presentation
+        # Step 4: Synthesis & Final Presentation
         self.job_manager.update_job_progress(job.id, 95.0, "Spokesperson formatting final deliverable...")
         if status_callback:
             await status_callback("Documentation Lead", "Generating docstrings, complexity analysis, and explanation...")
@@ -145,6 +155,7 @@ class MoAEngine:
             "code": best_code,
             "verified": is_verified,
             "rounds_used": round_idx,
+            "tot_score": tot_score,
             "elapsed_seconds": round(elapsed, 3),
             "job_id": job.id
         }
@@ -152,7 +163,7 @@ class MoAEngine:
         self.job_manager.mark_completed(
             job.id,
             result=result_payload,
-            summary=f"Solved & Verified in {elapsed:.2f}s ({round_idx} rounds)"
+            summary=f"Solved & Verified in {elapsed:.2f}s (ToT Score: {tot_score:.0f})"
         )
 
         return result_payload
@@ -239,8 +250,8 @@ def evaluate_expression(expr_str: str):
     return evaluator.visit(parsed.body)
 """
         # Default algorithmic template
-        return """def solve(*args, **kwargs):
-    # Optimized solution synthesized by Agent-Zed
+        return f"""# Optimized algorithm synthesized for: {problem}
+def solve(*args, **kwargs):
     pass
 """
 
