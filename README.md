@@ -16,7 +16,7 @@ Agent-Zed runs on **Python 3.8+** with **zero external API keys or heavy GPU req
    pkg update && pkg upgrade -y
    pkg install python git -y
    pip install rich
-   git clone https://github.com/your-repo/Agent-Zed.git
+   git clone https://github.com/TheStrongestOfTomorrow/Agent-Zed.git
    cd Agent-Zed
    ```
 3. Launch Agent-Zed:
@@ -27,7 +27,7 @@ Agent-Zed runs on **Python 3.8+** with **zero external API keys or heavy GPU req
 ### 💻 Linux / macOS / Windows Setup
 1. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/Agent-Zed.git
+   git clone https://github.com/TheStrongestOfTomorrow/Agent-Zed.git
    cd Agent-Zed
    ```
 2. (Optional) Create a virtual environment:
