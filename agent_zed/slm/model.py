@@ -1,7 +1,6 @@
 """TinyCodeGPT Neural Network Architecture & Pure Python SLM Engine for <4GB RAM Budget."""
 
-import math
-from typing import Optional, List, Dict, Any
+from typing import List
 
 class TinyCodeGPT:
     """Small Language Model (SLM) Architecture & Python Token Matrix Engine (~30M parameters)."""

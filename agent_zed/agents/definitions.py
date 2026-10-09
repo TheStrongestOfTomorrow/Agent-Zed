@@ -2,9 +2,8 @@
 
 import urllib.request
 import urllib.parse
-import json
 import re
-from typing import Dict, Any, List, Optional
+from typing import Dict, List
 
 class AgentPersona:
     """Represents an agent within the 13-agent corporate hierarchy."""
@@ -52,6 +51,13 @@ class WebSearchTool:
                     clean_snippet = re.sub(r'<[^>]+>', '', snippets[i]).strip()
                     clean_title = re.sub(r'<[^>]+>', '', titles[i]).strip() if i < len(titles) else "Web Search Result"
                     results.append({"title": clean_title, "snippet": clean_snippet})
+                if not results:
+                    # Request succeeded but nothing was parseable (layout change or
+                    # anomaly page) - degrade gracefully instead of returning [].
+                    return [{
+                        "title": "Web Search Fallback",
+                        "snippet": "Search response contained no parseable results (page layout may have changed). Using offline knowledge base."
+                    }]
                 return results
         except Exception as e:
             return [{"title": "Web Search Fallback", "snippet": f"Web search offline or timed out: {str(e)}. Using offline knowledge base."}]
