@@ -2,7 +2,7 @@
 
 import asyncio
 import time
-from typing import Dict, List, Any, Tuple
+from typing import Tuple
 from agent_zed.core.engine import MoAEngine
 from agent_zed.core.sandbox import CodeSandbox
 
@@ -24,6 +24,10 @@ HARD_BENCHMARK_PROBLEMS = [
         "description": "Implement ConcurrentQueue class with push, pop, and size methods using thread locking.",
         "test_cases": [
             {
+                # The test harness is declared up-front (as `setup`) so the MoA
+                # engine's internal verification loop and this runner verify
+                # against the exact same source - no hidden post-hoc injection.
+                "setup": "def execute_test():\n    q = ConcurrentQueue(10)\n    q.push(42)\n    return q.pop()",
                 "call": "execute_test()",
                 "expected": 42
             }
@@ -66,22 +70,27 @@ def run_benchmark_suite() -> Tuple[float, int]:
         )
         elapsed = time.time() - start_time
 
-        # Execute test cases against generated solution
+        # Re-execute test cases against the delivered solution, using the same
+        # shared snippet builder the engine loop used internally.
         code = res["code"]
         test_passed = True
 
         for tc in prob["test_cases"]:
-            tc_code = f"{code}\n\ndef execute_test():\n    q = ConcurrentQueue(10)\n    q.push(42)\n    return q.pop()\n\nresult = {tc['call']}\nassert result == {repr(tc['expected'])}, f'Expected {repr(tc['expected'])}, got {{result}}'\n"
+            tc_code = CodeSandbox.build_test_snippet(code, tc)
             sandbox_res = CodeSandbox.execute(tc_code)
             if not sandbox_res["success"]:
                 test_passed = False
                 print(f"     ❌ FAIL: {sandbox_res['stderr']}")
 
+        engine_flag = "engine-verified" if res.get("verified") else "engine-UNVERIFIED"
+        if res.get("repair_stalled"):
+            engine_flag += ", repair stalled"
+
         if test_passed:
             passed += 1
-            print(f"     ✅ PASS ({elapsed:.3f}s | verified in {res['rounds_used']} rounds | RAM < 150MB)")
+            print(f"     ✅ PASS ({elapsed:.3f}s | {res['rounds_used']} round(s) | {engine_flag} | RAM < 150MB)")
         else:
-            print(f"     ❌ FAIL")
+            print(f"     ❌ FAIL ({engine_flag})")
 
     pass_rate = (passed / total_tests) * 100.0
     print("\n--------------------------------------------------------------------------")
