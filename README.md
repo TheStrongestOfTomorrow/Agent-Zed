@@ -1,5 +1,9 @@
 # Agent-Zed (Zed-CLI) 🚀
 
+[![CI](https://github.com/TheStrongestOfTomorrow/Agent-Zed/actions/workflows/ci.yml/badge.svg)](https://github.com/TheStrongestOfTomorrow/Agent-Zed/actions/workflows/ci.yml)
+[![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
+
 > **A Lightweight, Powerful 13-Agent Mixture-of-Agents (MoA) Coding AI System**
 > *Designed to run 100% locally and offline on any machine—including Android phones with 4GB RAM (Termux) with under 25MB RAM footprint! Zero API keys required.*
 
@@ -44,6 +48,17 @@ Agent-Zed runs on **Python 3.8+** with **zero external API keys or heavy GPU req
    python3 -m agent_zed.cli
    ```
 
+### 📦 Install as a Python Package (`zed-cli` command)
+From the repo root:
+```bash
+pip install -e ".[cli]"
+```
+This registers the `zed-cli` console command:
+```bash
+zed-cli              # interactive CEO chat session
+zed-cli benchmark    # run the HARD coding benchmark suite
+```
+
 ---
 
 ## 💡 Frequently Asked Questions (FAQ)
@@ -74,9 +89,11 @@ Inside `zed-cli`, you can manage workforce jobs and interact with the CEO:
 
 | Command | Action |
 | :--- | :--- |
+| **`/solve <problem>`** | Create a background MoA coding job to synthesize & verify a solution |
 | **`/jobs`** | View live workforce jobs dashboard, assigned agents, and progress |
 | **`/agents`** | Display 13 agent personas, titles, and corporate hierarchy |
-| **`/solve <problem>`** | Create a background MoA coding job to synthesize & verify a solution |
+| **`/bench`** | Run the HARD coding benchmark suite in-session |
+| **`/help`** | Show available commands |
 | **`/quit`** | Exit the CLI session |
 
 ---
@@ -85,8 +102,13 @@ Inside `zed-cli`, you can manage workforce jobs and interact with the CEO:
 
 To test Agent-Zed against complex algorithmic challenges:
 ```bash
-python3 -m agent_zed.cli benchmark
+python3 -m agent_zed.cli benchmark   # or: zed-cli benchmark, or /bench inside the CLI
 ```
+Every benchmark result is now labeled with its engine verification status
+(`engine-verified` vs `engine-UNVERIFIED`) — the suite re-executes each test
+case through the same shared sandbox snippet builder the MoA engine uses
+internally, so nothing is verified "by magic".
+
 Benchmark problems evaluated:
 1. **Bitmask Dynamic Programming**: Traveling Salesperson Problem (TSP) shortest Hamiltonian cycle.
 2. **High Concurrency Threading**: Thread-safe bounded `ConcurrentQueue` data structure.
