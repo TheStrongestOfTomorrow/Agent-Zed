@@ -1,0 +1,2 @@
+# Runtime deps for the rich terminal experience (core engine has zero deps)
+rich>=13.0

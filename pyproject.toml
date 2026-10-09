@@ -1,0 +1,38 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "agent-zed"
+dynamic = ["version"]
+description = "Lightweight 13-agent Mixture-of-Agents coding AI with Tree-of-Thought beam search, Best-of-N inference-time scaling, and an AST sandbox - runs 100% offline."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { file = "LICENSE" }
+authors = [
+    { name = "TheStrongestOfTomorrow" }
+]
+keywords = ["ai", "agents", "mixture-of-agents", "tree-of-thought", "cli", "offline"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "Environment :: Console",
+    "Topic :: Software Development :: Code Generators",
+]
+dependencies = []
+
+[project.optional-dependencies]
+cli = ["rich>=13.0"]
+
+[project.scripts]
+zed-cli = "agent_zed.cli.__main__:main"
+
+[project.urls]
+Homepage = "https://github.com/TheStrongestOfTomorrow/Agent-Zed"
+Repository = "https://github.com/TheStrongestOfTomorrow/Agent-Zed"
+
+[tool.setuptools.dynamic]
+version = { attr = "agent_zed.__version__" }
+
+[tool.setuptools.packages.find]
+include = ["agent_zed*"]
