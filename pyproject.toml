@@ -36,3 +36,6 @@ version = { attr = "agent_zed.__version__" }
 
 [tool.setuptools.packages.find]
 include = ["agent_zed*"]
+
+[tool.setuptools.package-data]
+agent_zed = ["slm/weights/*.json"]
