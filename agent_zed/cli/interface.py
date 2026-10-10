@@ -22,13 +22,14 @@ HELP_COMMANDS_RICH = (
     "  [bold cyan]/solve <problem>[/bold cyan] - Create a background MoA job to synthesize & verify code\n"
     "  [bold cyan]/jobs[/bold cyan]            - View live workforce jobs dashboard\n"
     "  [bold cyan]/agents[/bold cyan]          - View 13 agent corporate hierarchy & status\n"
+    "  [bold cyan]/model[/bold cyan]           - Show TinyCodeGPT SLM status + live sample generation\n"
     "  [bold cyan]/bench[/bold cyan]           - Run the HARD coding benchmark suite\n"
     "  [bold cyan]/help[/bold cyan]            - Show this help\n"
     "  [bold cyan]/quit[/bold cyan]            - Exit zed-cli"
 )
 
 HELP_COMMANDS_PLAIN = (
-    "Commands: /solve <problem>, /jobs, /agents, /bench, /help, /quit"
+    "Commands: /solve <problem>, /jobs, /agents, /model, /bench, /help, /quit"
 )
 
 class ZedCLI:
@@ -143,6 +144,9 @@ class ZedCLI:
                 elif user_input.lower() in ["/bench", "/benchmark"]:
                     self.run_benchmark()
 
+                elif user_input.lower() == "/model":
+                    self.display_model_status()
+
                 elif user_input.lower().startswith("/solve"):
                     problem = user_input[len("/solve"):].strip()
                     if not problem:
@@ -195,6 +199,51 @@ class ZedCLI:
         if RICH_AVAILABLE:
             color = "green" if pass_rate == 100.0 else ("yellow" if pass_rate >= 50.0 else "red")
             self.console.print(f"\n[bold {color}]Benchmark result: {pass_rate:.1f}% pass rate across {total} test(s).[/{color}]")
+
+    def display_model_status(self):
+        """Show TinyCodeGPT SLM status and, when trained, a live generation."""
+        status = self.engine.slm_status()
+        mode = status.get("mode")
+
+        if mode == "trained":
+            header = (
+                f"TinyCodeGPT SLM: TRAINED ✅\n"
+                f"  arch: {status['arch']} | d_model={status['d_model']} layers={status['n_layers']} "
+                f"heads={status['n_heads']} ctx={status['ctx']} vocab={status['vocab_size']}\n"
+                f"  params: {status['param_count']:,} | steps: {status['trained_steps']:,} | "
+                f"val loss: {status['final_val_loss']} | ppl: {status['final_perplexity']}\n"
+                f"  corpus: {status['corpus_chars']:,} chars | trained on: {status['trained_on']} | {status['created_utc']}"
+            )
+        elif mode == "simulation":
+            header = (
+                "TinyCodeGPT SLM: SIMULATION MODE (no checkpoint found)\n"
+                "  Train one: python -m agent_zed.slm.train_github --preset tiny --steps 1500\n"
+                "  Or run the 'Train TinyCodeGPT SLM' GitHub Actions workflow."
+            )
+        else:
+            header = f"TinyCodeGPT SLM: {mode} (checkpoint present but trained_steps=0)"
+
+        if RICH_AVAILABLE:
+            self.console.print(Panel(header, title="[bold green]🧠 On-board SLM[/bold green]", border_style="cyan"))
+        else:
+            print("\n=== 🧠 ON-BOARD SLM ===")
+            print(header)
+
+        if mode == "trained":
+            prompt = "\n\ndef quicksort(arr):"
+            try:
+                sample = self.engine.slm_model.generate_text(prompt, max_new_tokens=48, temperature=0.8, seed=7)
+                if RICH_AVAILABLE:
+                    self.console.print(Panel(prompt + sample, title="[bold cyan]Live pure-Python sample generation (seed=7)[/bold cyan]", border_style="magenta"))
+                else:
+                    print(f"--- live sample (prompt={prompt!r}) ---")
+                    print(prompt + sample)
+            except Exception as e:
+                msg = f"generation failed: {e}"
+                if RICH_AVAILABLE:
+                    self.console.print(f"[bold red]{msg}[/bold red]")
+                else:
+                    print(msg)
 
     async def run_solve_task(self, problem: str):
         """Execute MoA coding task with live thinking visualization."""

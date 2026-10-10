@@ -44,8 +44,14 @@ class MoAEngine:
         self.job_manager = JobManager()
         self.optimizations = EngineOptimizations()
         self.tot_engine = TreeOfThoughtEngine(beam_width=4, max_depth=3)
-        self.slm_model = TinyCodeGPT(vocab_size=16000, max_len=256, d_model=256)
+        # Prefer real trained weights (shipped checkpoint / refreshed by the
+        # train-slm GitHub Actions workflow); fall back to simulation mode.
+        self.slm_model = TinyCodeGPT.try_load_default() or TinyCodeGPT(vocab_size=16000, max_len=256, d_model=256)
         self.memory_store: Dict[str, Any] = {}
+
+    def slm_status(self) -> Dict[str, Any]:
+        """Status of the on-board SLM (trained weights vs simulation mode)."""
+        return self.slm_model.status()
 
     def extract_code_blocks(self, text: str) -> List[str]:
         """Extract code blocks from markdown."""
