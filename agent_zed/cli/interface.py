@@ -1,12 +1,9 @@
 """Interactive `zed-cli` Terminal Interface with Real-time CEO Chat & Jobs Dashboard."""
 
-import sys
-import os
 import asyncio
-import time
-from typing import Optional, List
+from agent_zed import __version__
 from agent_zed.core.engine import MoAEngine
-from agent_zed.core.jobs import JobStatus, JobPriority
+from agent_zed.core.jobs import JobStatus
 from agent_zed.core.reasoning import ReasoningEngine
 from agent_zed.agents.definitions import get_13_agent_personas
 
@@ -14,13 +11,25 @@ try:
     from rich.console import Console
     from rich.panel import Panel
     from rich.table import Table
-    from rich.live import Live
-    from rich.layout import Layout
     from rich.text import Text
     from rich.prompt import Prompt
     RICH_AVAILABLE = True
 except ImportError:
     RICH_AVAILABLE = False
+
+HELP_COMMANDS_RICH = (
+    "Commands:\n"
+    "  [bold cyan]/solve <problem>[/bold cyan] - Create a background MoA job to synthesize & verify code\n"
+    "  [bold cyan]/jobs[/bold cyan]            - View live workforce jobs dashboard\n"
+    "  [bold cyan]/agents[/bold cyan]          - View 13 agent corporate hierarchy & status\n"
+    "  [bold cyan]/bench[/bold cyan]           - Run the HARD coding benchmark suite\n"
+    "  [bold cyan]/help[/bold cyan]            - Show this help\n"
+    "  [bold cyan]/quit[/bold cyan]            - Exit zed-cli"
+)
+
+HELP_COMMANDS_PLAIN = (
+    "Commands: /solve <problem>, /jobs, /agents, /bench, /help, /quit"
+)
 
 class ZedCLI:
     """Main CLI Application for Agent-Zed."""
@@ -44,14 +53,14 @@ class ZedCLI:
             )
             panel = Panel(
                 banner_text,
-                title="[bold green]AGENT-ZED CLI v1.0.0[/bold green]",
+                title=f"[bold green]AGENT-ZED CLI v{__version__}[/bold green]",
                 subtitle="[yellow]Optimized for Android / Termux (4GB RAM)[/yellow]",
                 border_style="cyan"
             )
             self.console.print(panel)
         else:
             print("=========================================================")
-            print("                AGENT-ZED CLI v1.0.0                    ")
+            print(f"                AGENT-ZED CLI v{__version__}".ljust(58))
             print("         13-Agent MoA Coding AI Framework               ")
             print("=========================================================")
 
@@ -92,16 +101,14 @@ class ZedCLI:
                 Panel(
                     "[bold yellow]CEO (Lead):[/bold yellow] Welcome! I'm the CEO of Agent-Zed. "
                     "I lead our 13-agent workforce. Talk to me naturally or ask any coding task!\n\n"
-                    "Commands:\n"
-                    "  [bold cyan]/jobs[/bold cyan]     - View live workforce jobs dashboard\n"
-                    "  [bold cyan]/agents[/bold cyan]   - View 13 agent corporate hierarchy & status\n"
-                    "  [bold cyan]/quit[/bold cyan]     - Exit zed-cli",
+                    + HELP_COMMANDS_RICH,
                     title="[bold green]Interactive CEO Session[/bold green]",
                     border_style="green"
                 )
             )
         else:
-            print("\nCEO (Lead): Welcome! Talk to me or type /jobs, /agents, or /quit.")
+            print("\nCEO (Lead): Welcome! Talk to me or type /help for commands.")
+            print(HELP_COMMANDS_PLAIN)
 
         while True:
             try:
@@ -127,13 +134,31 @@ class ZedCLI:
                 elif user_input.lower() == "/agents":
                     self.display_agents_hierarchy()
 
+                elif user_input.lower() in ["/help", "help"]:
+                    if RICH_AVAILABLE:
+                        self.console.print(Panel(HELP_COMMANDS_RICH, title="[bold green]zed-cli help[/bold green]", border_style="green"))
+                    else:
+                        print(HELP_COMMANDS_PLAIN)
+
+                elif user_input.lower() in ["/bench", "/benchmark"]:
+                    self.run_benchmark()
+
+                elif user_input.lower().startswith("/solve"):
+                    problem = user_input[len("/solve"):].strip()
+                    if not problem:
+                        msg = "CEO (Lead): Usage: /solve <problem description>"
+                        if RICH_AVAILABLE:
+                            self.console.print(f"[bold yellow]{msg}[/bold yellow]")
+                        else:
+                            print(msg)
+                    else:
+                        await self.run_solve_task(problem)
+
                 else:
                     # Process via reasoning engine
                     reply_or_task, is_coding_task = self.reasoning.process_input(user_input)
                     if is_coding_task:
-                        if user_input.startswith("/solve "):
-                            user_input = user_input[7:]
-                        await self.run_solve_task(user_input)
+                        await self.run_solve_task(reply_or_task)
                     else:
                         if RICH_AVAILABLE:
                             self.console.print(f"[bold yellow]CEO (Lead):[/bold yellow] {reply_or_task}")
@@ -161,6 +186,16 @@ class ZedCLI:
             for key, agent in self.personas.items():
                 print(f"- {agent.name} ({agent.title}) [{agent.role_type}]: {agent.personality}")
 
+    def run_benchmark(self):
+        """Run the HARD coding benchmark suite and display results."""
+        from agent_zed.benchmark.runner import run_benchmark_suite
+        if RICH_AVAILABLE:
+            self.console.print("[bold green]CEO (Lead):[/bold green] Dispatching Test Engineer - running HARD benchmark suite...\n")
+        pass_rate, total = run_benchmark_suite()
+        if RICH_AVAILABLE:
+            color = "green" if pass_rate == 100.0 else ("yellow" if pass_rate >= 50.0 else "red")
+            self.console.print(f"\n[bold {color}]Benchmark result: {pass_rate:.1f}% pass rate across {total} test(s).[/{color}]")
+
     async def run_solve_task(self, problem: str):
         """Execute MoA coding task with live thinking visualization."""
         if RICH_AVAILABLE:
@@ -176,14 +211,32 @@ class ZedCLI:
 
         res = await self.engine.solve_coding_problem(problem, status_callback=status_cb)
 
+        # Honest verification badge - never claim "verified" unless the sandbox
+        # AND supplied test cases actually passed. Without test cases, the best
+        # we can claim is "executed cleanly".
+        if res.get("verified") and res.get("tests_supplied"):
+            badge_rich = "[bold green]✅ VERIFIED[/bold green] (sandbox + all test cases passed)"
+            badge_plain = "[VERIFIED] sandbox + all test cases passed"
+        elif res.get("verified"):
+            badge_rich = "[bold green]✅ EXECUTED CLEAN[/bold green] (no test cases supplied - correctness not proven)"
+            badge_plain = "[EXECUTED CLEAN] no test cases supplied - correctness not proven"
+        elif res.get("repair_stalled"):
+            badge_rich = "[bold red]⚠️ UNVERIFIED[/bold red] (repair loop stalled - no viable patch found)"
+            badge_plain = "[UNVERIFIED] repair loop stalled - no viable patch found"
+        else:
+            badge_rich = "[bold yellow]⚠️ UNVERIFIED[/bold yellow] (max rounds reached without passing verification)"
+            badge_plain = "[UNVERIFIED] max rounds reached without passing verification"
+
         if RICH_AVAILABLE:
             self.console.print("\n[bold cyan]=== FINAL SYNTHESIZED SOLUTION (Spokesperson) ===[/bold cyan]")
-            self.console.print(Panel(res["code"], title="[bold green]Verified Code Deliverable[/bold green]", border_style="green"))
-            self.console.print(f"[bold yellow]CEO (Lead):[/bold yellow] Job Completed in [green]{res['elapsed_seconds']}s[/green] across {res['rounds_used']} MoA round(s)!")
+            self.console.print(Panel(res["code"], title="Code Deliverable", border_style="green" if res.get("verified") else "yellow"))
+            self.console.print(f"{badge_rich}")
+            self.console.print(f"[bold yellow]CEO (Lead):[/bold yellow] Job finished in [green]{res['elapsed_seconds']}s[/green] across {res['rounds_used']} MoA round(s).")
         else:
             print("\n=== FINAL SYNTHESIZED SOLUTION ===")
             print(res["code"])
-            print(f"CEO (Lead): Job Completed in {res['elapsed_seconds']}s!")
+            print(badge_plain)
+            print(f"CEO (Lead): Job finished in {res['elapsed_seconds']}s!")
 
 def main():
     cli = ZedCLI()

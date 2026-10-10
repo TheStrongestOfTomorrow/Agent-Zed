@@ -1,14 +1,13 @@
 """Core Mixture-of-Agents (MoA) Engine & Tree-of-Thought Reasoning System."""
 
-import asyncio
-import time
 import ast
+import time
 import re
-from typing import Dict, List, Any, Optional, AsyncGenerator, Tuple
+from typing import Dict, List, Any, Optional, Tuple
 from agent_zed.core.sandbox import CodeSandbox
-from agent_zed.core.jobs import JobManager, JobPriority, Job, JobStatus
+from agent_zed.core.jobs import JobManager, JobPriority, JobStatus
 from agent_zed.core.reasoning import TreeOfThoughtEngine
-from agent_zed.core.scaling import best_of_n_scaling, DeterministicVerifier
+from agent_zed.core.scaling import best_of_n_scaling
 from agent_zed.slm.model import TinyCodeGPT
 
 class EngineOptimizations:
@@ -93,8 +92,13 @@ class MoAEngine:
         if status_callback:
             await status_callback("Researcher", "Scaling inference-time compute: Best-of-N sampling & rule verifiers...")
 
-        def candidate_gen_fn(temp: float) -> str:
-            return self.tot_engine.search_best_thought(problem_description, initial_draft)[0]
+        def candidate_gen_fn(temp: float, sample_idx: int) -> str:
+            # Temperature-seeded ToT sampling: each sample index explores a
+            # distinct (reproducible) path through the thought tree, so the
+            # Best-of-N majority vote operates on genuinely varied candidates.
+            return self.tot_engine.sample_thought(
+                problem_description, initial_draft, temperature=temp, seed=sample_idx
+            )[0]
 
         best_candidate, valid_samples = best_of_n_scaling(
             candidate_gen_fn,
@@ -109,6 +113,7 @@ class MoAEngine:
         round_idx = 0
         best_code = current_code
         is_verified = False
+        repair_stalled = False
 
         while round_idx < max_rounds and not is_verified:
             round_idx += 1
@@ -118,7 +123,7 @@ class MoAEngine:
             if status_callback:
                 await status_callback("Debugger", f"Executing code in sandbox (Round {round_idx}/{max_rounds})...")
 
-            # Sandbox test run
+            # Sandbox test run (timeout enforced by CodeSandbox)
             sandbox_res = CodeSandbox.execute(current_code)
 
             # Test case verification if provided
@@ -127,16 +132,11 @@ class MoAEngine:
 
             if sandbox_res["success"] and test_cases:
                 for idx, tc in enumerate(test_cases):
-                    tc_code = f"{current_code}\n\n# Test execution\n"
-                    func_call = tc.get("call")
-                    expected = tc.get("expected")
-                    if func_call:
-                        tc_code += f"result = {func_call}\nassert result == {repr(expected)}, f'Expected {repr(expected)}, got {{result}}'\n"
-
+                    tc_code = CodeSandbox.build_test_snippet(current_code, tc)
                     tc_res = CodeSandbox.execute(tc_code)
                     if not tc_res["success"]:
                         passed_all_tests = False
-                        test_failures.append(f"Test {idx+1} ({func_call}): {tc_res['stderr']}")
+                        test_failures.append(f"Test {idx+1} ({tc.get('call')}): {tc_res['stderr']}")
 
             if sandbox_res["success"] and passed_all_tests:
                 is_verified = True
@@ -146,14 +146,30 @@ class MoAEngine:
                     await status_callback("Security Auditor", "Inspecting code for safety vulnerabilities... Clean!")
                 break
             else:
-                # Code failed, Debugger & Refactoring Specialist repair it
+                # Code failed, Debugger & Refactoring Specialist attempt a repair
                 error_feedback = sandbox_res["stderr"] or "\n".join(test_failures)
                 if status_callback:
                     await status_callback("Debugger", f"Detected error in round {round_idx}: {error_feedback[:150]}")
-                    await status_callback("Refactoring Specialist", "Applying AST repairs and patching logic error...")
 
-                current_code = self._repair_code_draft(problem_description, current_code, error_feedback)
-                best_code = current_code
+                repaired_code = self._repair_code_draft(problem_description, current_code, error_feedback)
+                if self._code_semantics_unchanged(repaired_code, current_code):
+                    # Repair produced no change: further rounds would repeat the
+                    # same failure. Report honestly instead of burning rounds.
+                    repair_stalled = True
+                    self.job_manager.update_job_progress(
+                        job.id, progress,
+                        f"Round {round_idx}: repair stalled - no viable patch found"
+                    )
+                    if status_callback:
+                        await status_callback(
+                            "Refactoring Specialist",
+                            "No viable AST repair found for this failure mode - halting repair loop honestly."
+                        )
+                    break
+
+                if status_callback:
+                    await status_callback("Refactoring Specialist", "Applying AST repairs and patching logic error...")
+                current_code = repaired_code
 
         # Step 4: Synthesis & Final Presentation
         self.job_manager.update_job_progress(job.id, 95.0, "Spokesperson formatting final deliverable...")
@@ -165,16 +181,20 @@ class MoAEngine:
         result_payload = {
             "code": best_code,
             "verified": is_verified,
+            "tests_supplied": bool(test_cases),
             "rounds_used": round_idx,
+            "repair_stalled": repair_stalled,
             "elapsed_seconds": round(elapsed, 3),
             "job_id": job.id
         }
 
-        self.job_manager.mark_completed(
-            job.id,
-            result=result_payload,
-            summary=f"Solved & Verified in {elapsed:.2f}s (Best-of-N Passed)"
-        )
+        if is_verified:
+            summary = f"Solved & Verified in {elapsed:.2f}s (Best-of-N Passed)"
+        elif repair_stalled:
+            summary = f"Unverified in {elapsed:.2f}s (repair stalled after {round_idx} round(s))"
+        else:
+            summary = f"Unverified in {elapsed:.2f}s ({round_idx} round(s), max_rounds reached)"
+        self.job_manager.mark_completed(job.id, result=result_payload, summary=summary)
 
         return result_payload
 
@@ -265,8 +285,44 @@ def solve(*args, **kwargs):
     pass
 """
 
+    @staticmethod
+    def _code_semantics_unchanged(new_code: str, old_code: str) -> bool:
+        """True if a 'repair' changed nothing semantic (e.g. only comments).
+
+        Compares AST dumps so comment-prefix variations coming out of the
+        Tree-of-Thought beam are not mistaken for real patches. Falls back to
+        comment-stripped text comparison when either side fails to parse.
+        """
+        def normalize(code: str) -> str:
+            try:
+                return ast.dump(ast.parse(code))
+            except SyntaxError:
+                lines = [l for l in code.splitlines() if not l.strip().startswith("#")]
+                return "\n".join(lines).strip()
+
+        return normalize(new_code) == normalize(old_code)
+
     def _repair_code_draft(self, problem: str, code: str, error: str) -> str:
-        """Internal code repair logic."""
-        if "pass" in code:
+        """Internal code repair logic driven by sandbox/test error feedback.
+
+        Repair strategies, in priority order:
+        1. SyntaxError        -> regenerate a fresh draft from the template bank.
+        2. Stub-body failure  -> if the draft is still an empty ``pass`` stub and
+                                 the failure came from a test assertion, try a
+                                 fresh draft (keyword routing may differ).
+        3. Otherwise          -> return the code unchanged; the caller detects the
+                                 no-op and halts the loop instead of pretending
+                                 to repair (honest ``repair_stalled`` reporting).
+        """
+        error_text = error or ""
+
+        if "SyntaxError" in error_text:
             return self._generate_algorithm_draft(problem)
+
+        is_stub = bool(re.search(r"^\s*pass\s*$", code, re.MULTILINE))
+        if is_stub and ("AssertionError" in error_text or "Expected" in error_text):
+            fresh = self._generate_algorithm_draft(problem)
+            if fresh.strip() != code.strip():
+                return fresh
+
         return code

@@ -1,6 +1,5 @@
 """Exclusive Job Delegation and Management System for zed-cli."""
 
-import asyncio
 import time
 import uuid
 from enum import Enum
@@ -71,7 +70,6 @@ class JobManager:
     def __init__(self):
         self.jobs: Dict[str, Job] = {}
         self.job_handlers: Dict[str, Callable] = {}
-        self._lock = asyncio.Lock()
 
     def create_job(
         self,
@@ -132,7 +130,7 @@ class JobManager:
         failed = sum(1 for j in self.jobs.values() if j.status == JobStatus.FAILED)
 
         lines = [
-            f"=== AGENT-ZED WORKFORCE JOB REPORT ===",
+            "=== AGENT-ZED WORKFORCE JOB REPORT ===",
             f"Total Jobs: {total} | Running: {running} | Pending: {pending} | Completed: {completed} | Failed: {failed}",
             "--------------------------------------------------------------------------------"
         ]

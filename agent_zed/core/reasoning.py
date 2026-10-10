@@ -1,8 +1,11 @@
 """Deep Tree-of-Thought (ToT) Beam Search Reasoning Engine for Agent-Zed."""
 
+import ast
 import math
-import re
-from typing import List, Dict, Any, Tuple, Optional
+import random
+from typing import List, Optional, Tuple
+
+from agent_zed.core.sandbox import CodeSandbox
 from agent_zed.dataset.knowledge import KnowledgeSynthesizer
 
 class ThoughtNode:
@@ -16,18 +19,38 @@ class ThoughtNode:
         self.children: List['ThoughtNode'] = []
 
     def evaluate_heuristic(self, task_description: str) -> float:
-        """Evaluate logic quality, syntax validity, completeness, and algorithmic efficiency."""
+        """Evaluate logic quality, syntax validity, completeness, and algorithmic efficiency.
+
+        Combines three real signals:
+        1. Hard syntax verification via the AST sandbox (invalid code is penalized).
+        2. Structural completeness parsed from the AST (defs/classes/returns).
+        3. Algorithmic pattern affinity with the task description.
+        """
         score = 0.0
         code = self.content
         t_lower = task_description.lower()
 
-        # Syntax check
-        if "def " in code or "class " in code:
-            score += 25.0
-        if "return " in code:
-            score += 15.0
+        # Signal 1: hard syntax verification (real programmatic check, not keywords)
+        is_valid, _ = CodeSandbox.verify_syntax(code)
+        if is_valid:
+            score += 40.0
+        else:
+            score -= 50.0
 
-        # Algorithmic pattern matching
+        # Signal 2: structural completeness from the AST
+        if is_valid:
+            try:
+                tree = ast.parse(code)
+                n_def = sum(isinstance(n, (ast.FunctionDef, ast.AsyncFunctionDef)) for n in ast.walk(tree))
+                n_class = sum(isinstance(n, ast.ClassDef) for n in ast.walk(tree))
+                n_return = sum(isinstance(n, ast.Return) for n in ast.walk(tree))
+                score += min(n_def * 5.0, 20.0)
+                score += min(n_class * 5.0, 10.0)
+                score += min(n_return * 2.0, 10.0)
+            except SyntaxError:
+                pass
+
+        # Signal 3: algorithmic pattern affinity with the task
         if "dp" in t_lower or "bitmask" in t_lower or "tsp" in t_lower:
             if "memo" in code or "dp" in code or "mask" in code:
                 score += 30.0
@@ -50,7 +73,7 @@ class ThoughtNode:
         return score
 
 class TreeOfThoughtEngine:
-    """Advanced Tree-of-Thought Search with Beam Search Pruning."""
+    """Advanced Tree-of-Thought Search with Beam Search Pruning and temperature-seeded sampling."""
 
     def __init__(self, beam_width: int = 4, max_depth: int = 3):
         self.beam_width = beam_width
@@ -62,54 +85,69 @@ class TreeOfThoughtEngine:
         expansions = []
         base_code = node.content
 
-        # Candidate Branch 1: Optimized Algorithmic Refinement
-        b1_content = self._refine_candidate(base_code, task_description, mode="optimized")
-        n1 = ThoughtNode(b1_content, depth=node.depth + 1, parent=node)
-        n1.evaluate_heuristic(task_description)
-        expansions.append(n1)
-
-        # Candidate Branch 2: Robust Edge-Case Defensive Guard
-        b2_content = self._refine_candidate(base_code, task_description, mode="defensive")
-        n2 = ThoughtNode(b2_content, depth=node.depth + 1, parent=node)
-        n2.evaluate_heuristic(task_description)
-        expansions.append(n2)
-
-        # Candidate Branch 3: High Performance Async / Concurrency
-        b3_content = self._refine_candidate(base_code, task_description, mode="performance")
-        n3 = ThoughtNode(b3_content, depth=node.depth + 1, parent=node)
-        n3.evaluate_heuristic(task_description)
-        expansions.append(n3)
+        for mode in ("optimized", "defensive", "performance"):
+            content = self._refine_candidate(base_code, task_description, mode=mode)
+            child = ThoughtNode(content, depth=node.depth + 1, parent=node)
+            child.evaluate_heuristic(task_description)
+            expansions.append(child)
 
         node.children = expansions
         return expansions
 
     def search_best_thought(self, task_description: str, initial_code: str) -> Tuple[str, float]:
-        """Perform Beam Search over Tree-of-Thought nodes to find optimal solution."""
+        """Deterministic Beam Search over Tree-of-Thought nodes (greedy, temperature 0)."""
+        return self.sample_thought(task_description, initial_code, temperature=0.0, seed=0)
+
+    def sample_thought(
+        self,
+        task_description: str,
+        initial_code: str,
+        temperature: float = 0.7,
+        seed: int = 0
+    ) -> Tuple[str, float]:
+        """Sample a solution path through the thought tree.
+
+        - ``temperature <= 0``: greedy argmax over the final beam (deterministic).
+        - ``temperature > 0``:  softmax-weighted stochastic selection, with a
+          per-(seed, temperature) RNG driving tie-breaks. Same seed + temperature
+          always yields the same sample, so Best-of-N voting is reproducible.
+        """
+        rng = random.Random(f"{seed}:{round(float(temperature), 4)}")
+
         root = ThoughtNode(initial_code, depth=0)
         root.evaluate_heuristic(task_description)
 
         current_beam = [root]
 
-        for depth in range(self.max_depth):
-            next_beam = []
+        for _depth in range(self.max_depth):
+            next_beam: List[ThoughtNode] = []
             for node in current_beam:
-                children = self.expand_branches(node, task_description)
-                next_beam.extend(children)
+                next_beam.extend(self.expand_branches(node, task_description))
 
             if not next_beam:
                 break
 
-            # Sort candidate nodes by heuristic score and prune to beam_width
-            next_beam.sort(key=lambda n: n.score, reverse=True)
+            # Sort by heuristic score; RNG tie-break makes path order seed-dependent
+            next_beam.sort(key=lambda n: (n.score, rng.random()), reverse=True)
             current_beam = next_beam[: self.beam_width]
 
-        best_node = max(current_beam, key=lambda n: n.score)
+        if not current_beam:
+            return initial_code, 0.0
+
+        if temperature <= 0:
+            best_node = max(current_beam, key=lambda n: n.score)
+            return best_node.content, best_node.score
+
+        scores = [n.score for n in current_beam]
+        max_score = max(scores)
+        weights = [math.exp((s - max_score) / max(temperature, 1e-3)) for s in scores]
+        best_node = rng.choices(current_beam, weights=weights, k=1)[0]
         return best_node.content, best_node.score
 
     def _refine_candidate(self, code: str, task: str, mode: str) -> str:
         """Helper to generate refined branch variations."""
         if mode == "defensive":
-            if "try:" not in code and ("def " in code or "class " in code):
+            if "# Added defensive guard checks" not in code and ("def " in code or "class " in code):
                 return f"# Added defensive guard checks\n{code}"
         elif mode == "performance":
             if "# Performance optimized" not in code:
