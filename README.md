@@ -1,6 +1,7 @@
 # Agent-Zed (Zed-CLI) 🚀
 
 [![CI](https://github.com/TheStrongestOfTomorrow/Agent-Zed/actions/workflows/ci.yml/badge.svg)](https://github.com/TheStrongestOfTomorrow/Agent-Zed/actions/workflows/ci.yml)
+[![Train TinyCodeGPT SLM](https://github.com/TheStrongestOfTomorrow/Agent-Zed/actions/workflows/train-slm.yml/badge.svg)](https://github.com/TheStrongestOfTomorrow/Agent-Zed/actions/workflows/train-slm.yml)
 [![Python 3.8+](https://img.shields.io/badge/python-3.8%2B-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
@@ -93,6 +94,7 @@ Inside `zed-cli`, you can manage workforce jobs and interact with the CEO:
 | **`/jobs`** | View live workforce jobs dashboard, assigned agents, and progress |
 | **`/agents`** | Display 13 agent personas, titles, and corporate hierarchy |
 | **`/bench`** | Run the HARD coding benchmark suite in-session |
+| **`/model`** | Show TinyCodeGPT SLM status + live pure-Python sample generation |
 | **`/help`** | Show available commands |
 | **`/quit`** | Exit the CLI session |
 
@@ -120,6 +122,44 @@ Benchmark problems evaluated:
 ```bash
 python3 -m unittest discover -s tests
 ```
+
+---
+
+## 🧠 TinyCodeGPT: A Real SLM Trained on GitHub Actions
+
+Agent-Zed ships a **real char-level transformer** (TinyCodeGPT, ~116K params) trained on CPU by the
+[`train-slm.yml`](../../actions/workflows/train-slm.yml) GitHub Actions workflow — no GPUs, no API keys.
+
+**How it works:**
+- **Corpus** (~1.2MB): Agent-Zed's own source + curated pure-Python stdlib modules — collected on the runner itself, zero dataset downloads.
+- **Training**: PyTorch (CPU wheels) trains a 2-layer, d=64, 4-head causal transformer with tied embeddings at char level (~1500 steps ≈ a few minutes on a 2-vCPU runner).
+- **Inference**: weights export to a compact JSON checkpoint that runs through a **zero-dependency pure-Python runtime** (`agent_zed/slm/purepy.py`, KV-cached, `math`+`random` only) — so the trained model runs even on Termux/4GB Android, keeping the offline promise.
+- **Parity is enforced by tests**: torch ↔ pure-Python logits must match (see `tests/test_slm.py`).
+
+**Try it:**
+```bash
+zed-cli            # then type: /model
+```
+
+**Retrain it:**
+```bash
+# locally (needs the CPU torch build)
+pip install torch --index-url https://download.pytorch.org/whl/cpu
+python -m agent_zed.slm.train_github --preset tiny --steps 1500
+
+# or on GitHub Actions:
+#   Actions → "Train TinyCodeGPT SLM" → Run workflow
+#   (preset tiny/small, custom steps, optional commit-back of refreshed weights)
+# A scheduled run also refreshes weights every Sunday 03:00 UTC (artifact only).
+```
+
+Each run publishes a training report (loss curve, val perplexity, sample generations) in the job's
+**Step Summary**, plus a downloadable weights artifact.
+
+> **Honesty note:** at this scale the model produces *code-shaped* text (learned indentation,
+> keywords, identifiers) — it is a genuine trained SLM, not a substitute for the deterministic
+> template+verification path that `/solve` uses for *verified* deliverables. The plumbing
+> (seeded sampling, checkpoint format, parity tests) is built for the model to grow into.
 
 ---
 
